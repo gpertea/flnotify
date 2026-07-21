@@ -76,6 +76,8 @@ bool load_config(Config& cfg) {
     else if (key == "device_id") cfg.device_id = val;
     else if (key == "device_name") cfg.device_name = val;
     else if (key == "paused") cfg.paused = to_bool(val, cfg.paused);
+    else if (key == "native_notifications")
+      cfg.native_notifications = to_bool(val, cfg.native_notifications);
     else if (key == "popup_timeout") cfg.popup_timeout = std::max(1, std::atoi(val.c_str()));
     else if (key == "run_at_startup") cfg.run_at_startup = to_bool(val, cfg.run_at_startup);
     else if (key.rfind("show_priority_", 0) == 0) {
@@ -97,6 +99,9 @@ bool save_config(const Config& cfg) {
          "device_name = " << cfg.device_name << "\n"
          "\n[display]\n"
          "paused = " << (cfg.paused ? 1 : 0) << "\n"
+         "; 1 = use OS notifications (Windows toasts — hidden by Focus Assist unless\n"
+         ";     this app is allowed); 0 = always-visible built-in popup (default)\n"
+         "native_notifications = " << (cfg.native_notifications ? 1 : 0) << "\n"
          "popup_timeout = " << cfg.popup_timeout << "\n"
          "run_at_startup = " << (cfg.run_at_startup ? 1 : 0) << "\n"
          "; per-priority popup toggles (-2 lowest .. 2 emergency)\n";

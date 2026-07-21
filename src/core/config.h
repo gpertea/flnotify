@@ -9,6 +9,9 @@ struct Config {
 
   // Display preferences
   bool paused = false;
+  // Use the OS notification system (Windows toasts, subject to Focus Assist /
+  // Action Center) instead of the always-visible FLTK popup. Off by default.
+  bool native_notifications = false;
   int popup_timeout = 8;                                    // seconds
   bool show_priority[5] = {true, true, true, true, true};   // index = priority + 2
   bool run_at_startup = false;

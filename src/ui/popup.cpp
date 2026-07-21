@@ -4,6 +4,11 @@
 #include <FL/Fl_Box.H>
 #include <FL/Fl_Window.H>
 #include <FL/filename.H>
+#include <FL/platform.H>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include <string>
 #include <vector>
@@ -97,4 +102,9 @@ void popup_show(const Message& m, int timeout_sec) {
   g_active.push_back(p);
   relayout();
   p->show();
+#ifdef _WIN32
+  // Keep the toast above the taskbar/tray flyout without stealing focus.
+  SetWindowPos(fl_xid(p), HWND_TOPMOST, 0, 0, 0, 0,
+               SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+#endif
 }
