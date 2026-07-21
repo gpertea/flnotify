@@ -1,0 +1,7 @@
+build/
+flnotify
+flnotify.exe
+flnotify.ini
+flnotify.log
+compile_commands.json
+.cache/
