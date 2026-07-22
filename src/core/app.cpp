@@ -110,7 +110,8 @@ void open_settings() {
 
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
+  bool test_popup = argc > 1 && std::string(argv[1]) == "--test-popup";
   Fl::lock();  // enable FLTK multithread support (workers use Fl::awake)
 
   logx::init(exe_dir() + "/flnotify.log");
@@ -149,11 +150,15 @@ int main() {
   update_tooltip("");
   g_notifier = create_notifier(*g_tray);
 
-  g_sources = create_sources();
-  if (g_cfg.has_credentials())
-    start_sources();
-  else
-    open_settings();  // first start: configure, which then starts the sources
+  if (test_popup) {  // debug aid: show a popup immediately, skip networking
+    cb.on_test();
+  } else {
+    g_sources = create_sources();
+    if (g_cfg.has_credentials())
+      start_sources();
+    else
+      open_settings();  // first start: configure, which then starts the sources
+  }
 
   while (!g_quit)
     Fl::wait(0.5);

@@ -136,8 +136,13 @@ void popup_show(const Message& m, const Config& cfg, int timeout_sec) {
   g_active.push_back(p);
   relayout();
   p->show();
+  // Positioning before show() is not honored for borderless/override windows
+  // on Windows (they come up at the cursor) — enforce it again on the live
+  // window, and pass explicit coordinates to SetWindowPos as well.
+  relayout();
 #ifdef _WIN32
-  // Keep the toast above the taskbar/tray flyout without stealing focus.
+  // Topmost only — position is FLTK's job: p->x()/y() are logical (DPI-scaled)
+  // units and must NOT be fed to SetWindowPos, which takes physical pixels.
   SetWindowPos(fl_xid(p), HWND_TOPMOST, 0, 0, 0, 0,
                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 #endif
