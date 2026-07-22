@@ -77,12 +77,19 @@ private:
     nid.hIcon = LoadIconW(nullptr, MAKEINTRESOURCEW(32512));  // IDI_APPLICATION; TODO: real icon via .rc
     lstrcpynW(nid.szTip, widen(tooltip_.empty() ? "flnotify" : tooltip_).c_str(),
               ARRAYSIZE(nid.szTip));
-    // NIM_ADD can fail transiently (Explorer busy, or purging the icon of a
-    // just-killed previous instance) — retry briefly before giving up.
-    for (int attempt = 0; attempt < 6; ++attempt) {
+    // NIM_ADD can fail for a while (Explorer purging the icon of a just-killed
+    // previous instance, or the taskbar not yet up during Windows login) —
+    // retry patiently before giving up.
+    DWORD last_err = (DWORD)-1;
+    for (int attempt = 0; attempt < 30; ++attempt) {
       if (Shell_NotifyIconW(NIM_ADD, &nid)) return true;
-      logx::write("tray: NIM_ADD failed, error " + std::to_string(GetLastError()));
-      Sleep(500);
+      DWORD err = GetLastError();
+      if (Shell_NotifyIconW(NIM_MODIFY, &nid)) return true;  // already registered
+      if (err != last_err) {
+        logx::write("tray: NIM_ADD failed, error " + std::to_string(err));
+        last_err = err;
+      }
+      Sleep(1000);
     }
     return false;
   }

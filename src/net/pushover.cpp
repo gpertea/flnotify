@@ -39,6 +39,17 @@ std::string api_errors(const json& j) {
   return out;
 }
 
+// Log an unexpected response body for debugging — but never a secret.
+void log_body(const char* what, const HttpResponse& resp) {
+  std::string note;
+  if (resp.body.find("secret") != std::string::npos)
+    note = "(body contains a secret — redacted)";
+  else
+    note = resp.body.substr(0, 300);
+  logx::write(std::string(what) + ": HTTP " + std::to_string(resp.status) +
+              ", body: " + note);
+}
+
 Result api_fail(const HttpResponse& resp, const char* what) {
   Result r;
   if (resp.status == 0) {
@@ -70,15 +81,19 @@ Result login(const std::string& email, const std::string& password,
   if (!resp.ok()) return api_fail(resp, "login");
   try {
     auto j = json::parse(resp.body);
-    if (j.value("status", 0) == 1 && j.contains("secret")) {
+    if (j.contains("secret") && j["secret"].is_string()) {
       secret_out = j["secret"].get<std::string>();
       Result r;
       r.ok = true;
       return r;
     }
-  } catch (...) {}
+  } catch (const std::exception& e) {
+    logx::write(std::string("login: JSON parse error: ") + e.what());
+  }
+  log_body("login: unexpected response", resp);
   Result r;
-  r.error = "login: unexpected response";
+  r.error = "login: unexpected response (HTTP " + std::to_string(resp.status) +
+            ") — see flnotify.log";
   return r;
 }
 
@@ -89,15 +104,19 @@ Result register_device(const std::string& secret, const std::string& name,
   if (!resp.ok()) return api_fail(resp, "device registration");
   try {
     auto j = json::parse(resp.body);
-    if (j.value("status", 0) == 1 && j.contains("id")) {
+    if (j.contains("id") && j["id"].is_string()) {
       device_id_out = j["id"].get<std::string>();
       Result r;
       r.ok = true;
       return r;
     }
-  } catch (...) {}
+  } catch (const std::exception& e) {
+    logx::write(std::string("device registration: JSON parse error: ") + e.what());
+  }
+  log_body("device registration: unexpected response", resp);
   Result r;
-  r.error = "device registration: unexpected response";
+  r.error = "device registration: unexpected response (HTTP " +
+            std::to_string(resp.status) + ") — see flnotify.log";
   return r;
 }
 
