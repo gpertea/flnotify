@@ -22,7 +22,9 @@ CURL* make_handle(std::string& body, char* errbuf) {
   return h;
 }
 
-HttpResponse perform(CURL* h, char* errbuf, HttpResponse resp) {
+// Takes resp by reference: the curl handle holds a pointer to resp.body,
+// so resp must not be moved/copied between setup and perform.
+void perform(CURL* h, char* errbuf, HttpResponse& resp) {
   CURLcode rc = curl_easy_perform(h);
   if (rc != CURLE_OK) {
     resp.status = 0;
@@ -31,7 +33,6 @@ HttpResponse perform(CURL* h, char* errbuf, HttpResponse resp) {
     curl_easy_getinfo(h, CURLINFO_RESPONSE_CODE, &resp.status);
   }
   curl_easy_cleanup(h);
-  return resp;
 }
 
 }  // namespace
@@ -52,7 +53,8 @@ HttpResponse get(const std::string& url) {
   CURL* h = make_handle(resp.body, errbuf);
   if (!h) { resp.error = "curl init failed"; return resp; }
   curl_easy_setopt(h, CURLOPT_URL, url.c_str());
-  return perform(h, errbuf, std::move(resp));
+  perform(h, errbuf, resp);
+  return resp;
 }
 
 HttpResponse post_form(const std::string& url,
@@ -72,7 +74,8 @@ HttpResponse post_form(const std::string& url,
   }
   curl_easy_setopt(h, CURLOPT_URL, url.c_str());
   curl_easy_setopt(h, CURLOPT_COPYPOSTFIELDS, form.c_str());
-  return perform(h, errbuf, std::move(resp));
+  perform(h, errbuf, resp);
+  return resp;
 }
 
 }  // namespace http
