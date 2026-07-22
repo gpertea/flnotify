@@ -2,17 +2,22 @@
 
 #include "core/log.h"
 #include "net/pushover.h"
+#include "ui/popup.h"
 
 #include <FL/Fl.H>
 #include <FL/Fl_Box.H>
 #include <FL/Fl_Button.H>
 #include <FL/Fl_Check_Button.H>
+#include <FL/Fl_Choice.H>
+#include <FL/Fl_Color_Chooser.H>
 #include <FL/Fl_Input.H>
 #include <FL/Fl_Return_Button.H>
 #include <FL/Fl_Secret_Input.H>
 #include <FL/Fl_Spinner.H>
 #include <FL/Fl_Window.H>
 
+#include <cstdio>
+#include <ctime>
 #include <string>
 #include <thread>
 
@@ -34,6 +39,13 @@ struct Dialog {
   Fl_Check_Button* native = nullptr;
   Fl_Spinner* timeout = nullptr;
   Fl_Check_Button* prio[5] = {};
+  Fl_Choice* screen = nullptr;
+  Fl_Choice* corner = nullptr;
+  Fl_Spinner* fontsize = nullptr;
+  Fl_Button* bg_btn = nullptr;
+  Fl_Button* fg_btn = nullptr;
+
+  std::string bg_hex, fg_hex;  // working copies edited by the color pickers
 
   std::string status_text;  // Fl_Box keeps a pointer; own the storage here
   void set_status(const std::string& s) {
@@ -44,6 +56,59 @@ struct Dialog {
 };
 
 Dialog* g_dlg = nullptr;  // only one dialog at a time; null once closed
+
+void swatch(Fl_Button* b, const std::string& hex, unsigned dflt) {
+  unsigned v = parse_hex_rgb(hex, dflt);
+  Fl_Color c = fl_rgb_color((v >> 16) & 0xff, (v >> 8) & 0xff, v & 0xff);
+  b->color(c);
+  b->labelcolor(fl_contrast(FL_BLACK, c));
+  b->redraw();
+}
+
+void pick_color(std::string& hex, Fl_Button* btn, const char* what,
+                unsigned dflt) {
+  unsigned v = parse_hex_rgb(hex, dflt);
+  uchar r = (v >> 16) & 0xff, g = (v >> 8) & 0xff, b = v & 0xff;
+  if (fl_color_chooser(what, r, g, b)) {
+    hex = rgb_to_hex(((unsigned)r << 16) | ((unsigned)g << 8) | b);
+    swatch(btn, hex, dflt);
+  }
+}
+
+void bg_cb(Fl_Widget*, void* v) {
+  auto* d = static_cast<Dialog*>(v);
+  pick_color(d->bg_hex, d->bg_btn, "Popup background", 0x2d2d30);
+}
+
+void fg_cb(Fl_Widget*, void* v) {
+  auto* d = static_cast<Dialog*>(v);
+  pick_color(d->fg_hex, d->fg_btn, "Popup text", 0xdcdcdc);
+}
+
+// Copy the display/appearance widget values into a Config.
+void widgets_to_cfg(Dialog* d, Config& c) {
+  c.device_name = d->devname->value();
+  c.native_notifications = d->native->value() != 0;
+  c.popup_timeout = (int)d->timeout->value();
+  for (int i = 0; i < 5; ++i) c.show_priority[i] = d->prio[i]->value() != 0;
+  c.popup_screen = d->screen->value();
+  c.popup_corner = d->corner->value();
+  c.popup_font_size = (int)d->fontsize->value();
+  c.popup_bg = d->bg_hex;
+  c.popup_fg = d->fg_hex;
+}
+
+void preview_cb(Fl_Widget*, void* v) {
+  auto* d = static_cast<Dialog*>(v);
+  Config tmp = *d->cfg;
+  widgets_to_cfg(d, tmp);
+  Message m;
+  m.title = "Preview";
+  m.app = "flnotify";
+  m.body = "This is how notifications will look with the current settings.";
+  m.date = std::time(nullptr);
+  popup_show(m, tmp, 4);
+}
 
 // Heap job passed to the login thread; results marshalled back via Fl::awake.
 struct LoginJob {
@@ -113,10 +178,7 @@ void login_cb(Fl_Widget*, void* v) {
 
 void save_cb(Fl_Widget*, void* v) {
   auto* d = static_cast<Dialog*>(v);
-  d->cfg->device_name = d->devname->value();
-  d->cfg->native_notifications = d->native->value() != 0;
-  d->cfg->popup_timeout = (int)d->timeout->value();
-  for (int i = 0; i < 5; ++i) d->cfg->show_priority[i] = d->prio[i]->value() != 0;
+  widgets_to_cfg(d, *d->cfg);
   save_config(*d->cfg);
   d->changed = true;
   d->open = false;
@@ -135,9 +197,11 @@ bool config_dialog_show(Config& cfg) {
   }
   Dialog d;
   d.cfg = &cfg;
+  d.bg_hex = cfg.popup_bg;
+  d.fg_hex = cfg.popup_fg;
   g_dlg = &d;
 
-  d.win = new Fl_Window(460, 470, "flnotify — Settings");
+  d.win = new Fl_Window(460, 580, "flnotify — Settings");
 
   new Fl_Box(10, 8, 440, 20, "Pushover account");
   d.email = new Fl_Input(120, 34, 320, 26, "Email:");
@@ -168,15 +232,41 @@ bool config_dialog_show(Config& cfg) {
     d.prio[i]->value(cfg.show_priority[i]);
   }
 
-  auto* note = new Fl_Box(15, 362, 430, 44,
+  new Fl_Box(10, 358, 440, 20, "Popup appearance");
+  d.screen = new Fl_Choice(120, 382, 70, 24, "Screen:");
+  for (int i = 0; i < Fl::screen_count(); ++i) {
+    char buf[8];
+    std::snprintf(buf, sizeof buf, "%d", i + 1);  // humans count from 1
+    d.screen->add(buf);
+  }
+  d.screen->value(cfg.popup_screen < Fl::screen_count() ? cfg.popup_screen : 0);
+  d.corner = new Fl_Choice(290, 382, 150, 24, "Corner:");
+  d.corner->add("Top right");
+  d.corner->add("Top left");
+  d.corner->add("Bottom right");
+  d.corner->add("Bottom left");
+  d.corner->value(cfg.popup_corner);
+  d.fontsize = new Fl_Spinner(120, 414, 70, 24, "Font size:");
+  d.fontsize->range(8, 32);
+  d.fontsize->value(cfg.popup_font_size);
+  d.bg_btn = new Fl_Button(120, 446, 105, 26, "Background…");
+  d.bg_btn->callback(bg_cb, &d);
+  swatch(d.bg_btn, d.bg_hex, 0x2d2d30);
+  d.fg_btn = new Fl_Button(235, 446, 105, 26, "Text…");
+  d.fg_btn->callback(fg_cb, &d);
+  swatch(d.fg_btn, d.fg_hex, 0xdcdcdc);
+  auto* preview = new Fl_Button(365, 446, 75, 26, "Preview");
+  preview->callback(preview_cb, &d);
+
+  auto* note = new Fl_Box(15, 484, 430, 44,
       "Note: an Open Client counts as a Pushover desktop client — free for "
       "30 days, then Pushover's one-time desktop license applies to your account.");
   note->align(FL_ALIGN_INSIDE | FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_WRAP);
   note->labelsize(11);
 
-  auto* save = new Fl_Return_Button(240, 420, 120, 30, "Save && close");
+  auto* save = new Fl_Return_Button(240, 536, 120, 30, "Save && close");
   save->callback(save_cb, &d);
-  auto* cancel = new Fl_Button(370, 420, 75, 30, "Cancel");
+  auto* cancel = new Fl_Button(370, 536, 75, 30, "Cancel");
   cancel->callback(cancel_cb, &d);
 
   d.win->end();

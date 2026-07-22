@@ -1,9 +1,10 @@
 #include "core/config.h"
 
+#include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
-#include <sstream>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -14,6 +15,21 @@
 #include <unistd.h>
 #include <climits>
 #endif
+
+unsigned parse_hex_rgb(const std::string& s, unsigned dflt) {
+  std::string t = s;
+  if (!t.empty() && t[0] == '#') t.erase(0, 1);
+  if (t.size() != 6) return dflt;
+  char* end = nullptr;
+  unsigned v = (unsigned)std::strtoul(t.c_str(), &end, 16);
+  return (end && *end == '\0') ? v : dflt;
+}
+
+std::string rgb_to_hex(unsigned rgb) {
+  char buf[8];
+  std::snprintf(buf, sizeof buf, "%06x", rgb & 0xffffff);
+  return buf;
+}
 
 std::string exe_dir() {
 #ifdef _WIN32
@@ -79,6 +95,14 @@ bool load_config(Config& cfg) {
     else if (key == "native_notifications")
       cfg.native_notifications = to_bool(val, cfg.native_notifications);
     else if (key == "popup_timeout") cfg.popup_timeout = std::max(1, std::atoi(val.c_str()));
+    else if (key == "popup_screen")
+      cfg.popup_screen = std::clamp(std::atoi(val.c_str()), 0, 15);
+    else if (key == "popup_corner")
+      cfg.popup_corner = std::clamp(std::atoi(val.c_str()), 0, 3);
+    else if (key == "popup_bg") cfg.popup_bg = val;
+    else if (key == "popup_fg") cfg.popup_fg = val;
+    else if (key == "popup_font_size")
+      cfg.popup_font_size = std::clamp(std::atoi(val.c_str()), 8, 32);
     else if (key == "run_at_startup") cfg.run_at_startup = to_bool(val, cfg.run_at_startup);
     else if (key.rfind("show_priority_", 0) == 0) {
       int p = std::atoi(key.c_str() + std::strlen("show_priority_"));
@@ -104,6 +128,14 @@ bool save_config(const Config& cfg) {
          "native_notifications = " << (cfg.native_notifications ? 1 : 0) << "\n"
          "popup_timeout = " << cfg.popup_timeout << "\n"
          "run_at_startup = " << (cfg.run_at_startup ? 1 : 0) << "\n"
+         "; popup placement: screen 0 = primary display; corner 0 = top-right,\n"
+         "; 1 = top-left, 2 = bottom-right, 3 = bottom-left\n"
+         "popup_screen = " << cfg.popup_screen << "\n"
+         "popup_corner = " << cfg.popup_corner << "\n"
+         "; popup colors (RRGGBB hex) and font size\n"
+         "popup_bg = " << cfg.popup_bg << "\n"
+         "popup_fg = " << cfg.popup_fg << "\n"
+         "popup_font_size = " << cfg.popup_font_size << "\n"
          "; per-priority popup toggles (-2 lowest .. 2 emergency)\n";
   for (int p = -2; p <= 2; ++p)
     out << "show_priority_" << p << " = " << (cfg.show_priority[p + 2] ? 1 : 0) << "\n";

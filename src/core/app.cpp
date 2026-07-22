@@ -38,7 +38,7 @@ void show_message(const Message& m) {
   if (g_cfg.paused) return;
   if (m.priority >= -2 && m.priority <= 2 && !g_cfg.show_priority[m.priority + 2]) return;
   if (!g_cfg.native_notifications || !g_notifier || !g_notifier->show(m))
-    popup_show(m, g_cfg.popup_timeout);
+    popup_show(m, g_cfg, g_cfg.popup_timeout);
 }
 
 void update_tooltip(const std::string& conn_state) {
@@ -73,7 +73,7 @@ void awake_error(void* v) {
   Message m;
   m.title = "flnotify — " + e->source + (e->fatal ? " stopped" : " error");
   m.body = e->text;
-  popup_show(m, 15);
+  popup_show(m, g_cfg, 15);
   if (e->fatal) update_tooltip(e->source + ": needs attention");
   delete e;
 }
