@@ -2,6 +2,8 @@
 #include "platform/tray.h"
 #include "platform/win_util.h"
 
+#include "core/log.h"
+
 #include <shellapi.h>
 
 namespace {
@@ -30,7 +32,11 @@ public:
 
     hwnd_ = CreateWindowExW(0, wc.lpszClassName, L"flnotify", 0, 0, 0, 0, 0,
                             HWND_MESSAGE, nullptr, wc.hInstance, this);
-    if (!hwnd_) return false;
+    if (!hwnd_) {
+      logx::write("tray: CreateWindowExW failed, error " +
+                  std::to_string(GetLastError()));
+      return false;
+    }
     return add_icon();
   }
 
@@ -71,7 +77,14 @@ private:
     nid.hIcon = LoadIconW(nullptr, MAKEINTRESOURCEW(32512));  // IDI_APPLICATION; TODO: real icon via .rc
     lstrcpynW(nid.szTip, widen(tooltip_.empty() ? "flnotify" : tooltip_).c_str(),
               ARRAYSIZE(nid.szTip));
-    return Shell_NotifyIconW(NIM_ADD, &nid);
+    // NIM_ADD can fail transiently (Explorer busy, or purging the icon of a
+    // just-killed previous instance) — retry briefly before giving up.
+    for (int attempt = 0; attempt < 6; ++attempt) {
+      if (Shell_NotifyIconW(NIM_ADD, &nid)) return true;
+      logx::write("tray: NIM_ADD failed, error " + std::to_string(GetLastError()));
+      Sleep(500);
+    }
+    return false;
   }
 
   void show_menu() {
